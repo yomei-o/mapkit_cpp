@@ -2,7 +2,7 @@
 # OSM の銭湯 (amenity=public_bath) を取得して docs/sento.txt に焼く。
 #   python build_sento.py [in.json | --fetch] [out.txt]
 # 形式: 各行 "lon lat 名前"（名前は行末まで。空白を含んでよい）
-# 温泉/スーパー銭湯/足湯 (bath:type) は除外し、昔ながらの銭湯寄りにする。
+# 足湯 (foot_bath) だけ除外。銭湯・温泉・スーパー銭湯は入れる。
 import sys, json, urllib.request, urllib.parse
 
 BBOX = "35.50,139.55,35.82,139.93"   # 東京 23 区あたり
@@ -10,7 +10,7 @@ QUERY = ('[out:json][timeout:120];('
          f'node["amenity"="public_bath"]({BBOX});'
          f'way["amenity"="public_bath"]({BBOX});'
          ');out tags center;')
-DROP = {'onsen', 'super_sento', 'hot_spring', 'foot_bath'}
+DROP = {'foot_bath'}
 
 
 def load(src):
