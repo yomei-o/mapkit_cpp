@@ -49,9 +49,9 @@ async function loadTiles(){
     if (todo.length) {
       await Promise.all(todo.map(async ([z,x,y]) => {
         try { const r = await fetch(`tiles/${z}/${x}/${y}.txt`);
-          if (!r.ok){ missing.add(z+'/'+x+'/'+y); return; }
+          if (!r.ok){ if (r.status===404) missing.add(z+'/'+x+'/'+y); return; }  // 404=本当に無い。503等は再試行
           const t = await r.text(); const p = pass(t); M._osm_tile(z,x,y,p); M._free(p);
-        } catch(e){ missing.add(z+'/'+x+'/'+y); } }));
+        } catch(e){ /* 一時エラーは再試行 */ } }));
       draw();
     }
   } finally {

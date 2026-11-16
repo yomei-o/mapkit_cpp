@@ -213,21 +213,20 @@ struct TiledLayer {
 
     static long long key(int x, int y) { return ((long long)x << 20) | (unsigned)y; }
 
-    // いま見えているタイルの (x,y)。引きすぎ（cap 超）なら空
+    // いま見えているタイルの (x,y)。引きすぎ（cap 超）なら空。範囲はメルカトルの有効域にクランプ
     std::vector<std::pair<int, int>> view_tiles(const Map& m) const {
         double w0x, w0y, w1x, w1y; m.to_world(0, 0, w0x, w0y); m.to_world(m.W, m.H, w1x, w1y);
         double lonA, latA, lonB, latB; m.unproject(w0x, w0y, lonA, latA); m.unproject(w1x, w1y, lonB, latB);
-        double lon0 = std::min(lonA, lonB), lon1 = std::max(lonA, lonB);
-        double lat0 = std::min(latA, latB), lat1 = std::max(latA, latB);
+        double lon0 = std::clamp(std::min(lonA, lonB), -180.0, 180.0), lon1 = std::clamp(std::max(lonA, lonB), -180.0, 180.0);
+        double lat0 = std::clamp(std::min(latA, latB), -85.0511, 85.0511), lat1 = std::clamp(std::max(latA, latB), -85.0511, 85.0511);
         double n = std::pow(2.0, z);
-        auto xt = [&](double lon) { return (int)std::floor((lon + 180.0) / 360.0 * n); };
-        auto yt = [&](double lat) { return (int)std::floor((1.0 - std::asinh(std::tan(lat * MK_PI / 180.0)) / MK_PI) / 2.0 * n); };
+        auto xt = [&](double lon) { return std::clamp((int)std::floor((lon + 180.0) / 360.0 * n), 0, (int)n - 1); };
+        auto yt = [&](double lat) { return std::clamp((int)std::floor((1.0 - std::asinh(std::tan(lat * MK_PI / 180.0)) / MK_PI) / 2.0 * n), 0, (int)n - 1); };
         int xa = xt(lon0), xb = xt(lon1), ya = yt(lat1), yb = yt(lat0);   // 北(lat1)→小さい y
+        if (xb < xa || yb < ya) return {};
+        if ((long long)(xb - xa + 1) * (yb - ya + 1) > cap) return {};
         std::vector<std::pair<int, int>> out;
-        for (int x = xa; x <= xb; ++x) for (int y = ya; y <= yb; ++y) {
-            out.push_back({x, y});
-            if ((int)out.size() > cap) return {};
-        }
+        for (int x = xa; x <= xb; ++x) for (int y = ya; y <= yb; ++y) out.push_back({x, y});
         return out;
     }
     bool has(int x, int y) const { return tiles.count(key(x, y)) != 0; }
