@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
         // 吹き出し検証：先頭の銭湯に名前を出す（WASM と同じ描画）
         if (!sp.empty() && font_obj.ok) {
             mk::V2 q = m.to_screen(sp[0].x, sp[0].y);
-            std::string nm = "清水湯";
+            std::string nm = "庄楽の湯（万葉倶楽部）";   // 以前 □ になった字の確認
             int fp = 13; float padx = 8.f, pady = 6.f;
             float bw = font_obj.width(nm, fp) + padx * 2, bh = fp + pady * 2;
             float bx0 = q.x - bw / 2, by1 = q.y - 15.f, by0 = by1 - bh, bx1 = bx0 + bw;

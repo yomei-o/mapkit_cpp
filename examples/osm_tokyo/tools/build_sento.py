@@ -39,6 +39,7 @@ def main():
         if lon is None or lat is None:
             continue
         name = (t.get('name') or '銭湯').replace('\n', ' ').replace('\r', ' ').strip()
+        name = name.replace('俱', '倶')   # 俱→倶（JISフォントに合わせて異体字を正規化）
         rows.append(f'{lon:.6f} {lat:.6f} {name}')
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(rows) + '\n')
