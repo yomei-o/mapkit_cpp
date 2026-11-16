@@ -11,8 +11,7 @@ mkdir -p docs
   -s MODULARIZE=1 -s EXPORT_NAME=createOSM -s ALLOW_MEMORY_GROWTH=1 -s STACK_SIZE=4194304 \
   -s EXPORTED_RUNTIME_METHODS='["HEAPU8","UTF8ToString","stringToUTF8","lengthBytesUTF8"]' -s EXPORTED_FUNCTIONS='["_malloc","_free"]' \
   examples/osm_tokyo/wasm/osm_wasm.cpp -o docs/osm.js
-cp examples/osm_tokyo/data/osm23.txt docs/osm23.txt
 cp examples/osm_tokyo/data/japan.txt docs/japan.txt
-cp examples/osm_tokyo/data/osm23_labels.txt docs/osm23_labels.txt
 cp examples/osm_tokyo/data/font.ttf docs/font.ttf
+# 地図の中身は docs/tiles/<z>/<x>/<y>.txt（tools/build_tiles.py で作る）を動的に読む
 echo "built docs/osm.js"

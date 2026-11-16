@@ -46,5 +46,18 @@ int main(int argc, char** argv) {
     mk::P2 c = m.project(139.8585, 35.7166);
     m.cx = c.x; m.cy = c.y; m.scale = 0.45;
     shot("shinkoiwa");
+
+    // タイル経路のテスト：新小岩の view で、見えるタイルを docs/tiles から読んで描く
+    mk::TiledLayer T; T.z = 13; T.cap = 64;
+    int nt = 0;
+    for (auto& xy : T.view_tiles(m)) {
+        std::string tp = "docs/tiles/13/" + std::to_string(xy.first) + "/" + std::to_string(xy.second) + ".txt";
+        std::string tt = read_all(tp);
+        if (!tt.empty()) { T.add(xy.first, xy.second, tt, m); ++nt; }
+    }
+    m.clear();
+    T.draw(m.base, m, st, order, font_obj, ls);
+    { const uint8_t* px = m.to_rgba(); std::string f = out + "_tiled.png"; stbi_write_png(f.c_str(), W, H, 4, px, W * 4);
+      printf("  tiled: %d tiles -> %s\n", nt, f.c_str()); }
     return 0;
 }

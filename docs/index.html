@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>OSM 東京23区ビューア — mapkit_cpp</title>
+<title>OSM 地図ビューア（タイル動的読み込み）— mapkit_cpp</title>
 <style>
   html,body { margin:0; height:100%; background:#060910; color:#e8eef6;
     font:14px/1.5 system-ui,"Hiragino Sans","Yu Gothic UI",sans-serif; overflow:hidden; }
@@ -19,13 +19,14 @@
 </head>
 <body>
 <div id="wrap"><canvas id="cv"></canvas></div>
-<div id="bar"><b>OSM 東京23区</b><button id="fit">全体</button><button id="here">現在地</button></div>
-<div id="hint">ドラッグで移動・ホイール/ピンチで拡大。金=幹線 橙=鉄道 青=川/海</div>
+<div id="bar"><b>OSM 地図</b><button id="fit">東京へ</button><button id="here">現在地</button></div>
+<div id="hint">ドラッグで移動・ホイール/ピンチで拡大。寄ると細い道と駅名が、引くと都道府県の形が出ます（タイルを動的に読み込み）</div>
 <div id="attr">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
 <div id="msg">読み込み中…</div>
 <script src="osm.js"></script>
 <script>
 let M, cv, ctx, img, W=0, H=0, dpr=1;
+const Z = 13;
 const $ = id => document.getElementById(id);
 function pass(s){ const n=M.lengthBytesUTF8(s)+1, p=M._malloc(n); M.stringToUTF8(s,p,n); return p; }
 function size(){
@@ -35,50 +36,73 @@ function size(){
   W=cv.width; H=cv.height; M._osm_resize(W,H,dpr); img=ctx.createImageData(W,H);
 }
 function draw(){ const p=M._osm_render(); img.data.set(M.HEAPU8.subarray(p,p+W*H*4)); ctx.putImageData(img,0,0); }
+
+// 見えている欠けタイルを取ってきて渡す
+const missing = new Set();
+let loading=false, loadAgain=false;
+async function loadTiles(){
+  if (loading){ loadAgain=true; return; }
+  loading=true;
+  try {
+    const wanted = JSON.parse(M.UTF8ToString(M._osm_wanted()));
+    const todo = wanted.filter(([z,x,y]) => !missing.has(z+'/'+x+'/'+y));
+    if (todo.length) {
+      await Promise.all(todo.map(async ([z,x,y]) => {
+        try { const r = await fetch(`tiles/${z}/${x}/${y}.txt`);
+          if (!r.ok){ missing.add(z+'/'+x+'/'+y); return; }
+          const t = await r.text(); const p = pass(t); M._osm_tile(z,x,y,p); M._free(p);
+        } catch(e){ missing.add(z+'/'+x+'/'+y); } }));
+      draw();
+    }
+  } finally {
+    loading=false;
+    if (loadAgain){ loadAgain=false; loadTiles(); }
+  }
+}
+let loadTimer=0;
+function scheduleLoad(){ clearTimeout(loadTimer); loadTimer=setTimeout(loadTiles, 120); }
+function changed(){ draw(); scheduleLoad(); }
+
 (async () => {
-  const [roads, labels, font, pref, mod] = await Promise.all([
-    fetch('osm23.txt').then(r=>r.text()),
-    fetch('osm23_labels.txt').then(r=>r.text()).catch(()=> ''),
+  const [font, pref, mod] = await Promise.all([
     fetch('font.ttf').then(r=>r.arrayBuffer()).catch(()=>new ArrayBuffer(0)),
     fetch('japan.txt').then(r=>r.text()).catch(()=> ''),
     createOSM()]);
   M = mod; cv = $('cv'); ctx = cv.getContext('2d');
-  const rp = pass(roads), lp = pass(labels);
   const fb = new Uint8Array(font), fpp = M._malloc(fb.length); M.HEAPU8.set(fb, fpp);
-  const nf = M._osm_init(rp, lp, fpp, fb.length);
-  M._free(rp); M._free(lp); M._free(fpp);
-  if (pref) { const pp = pass(pref); M._osm_pref(pp); M._free(pp); }   // 47都道府県の外形
-  if (!nf){ $('msg').textContent='読み込みに失敗しました'; return; }
-  $('msg').remove(); size(); M._osm_fit(); draw();
-  window.addEventListener('resize', ()=>{ size(); draw(); });
-  $('fit').onclick = ()=>{ M._osm_fit(); draw(); };
-  // 現在地：23区内にいれば赤い玉。iPhone Safari 向けに高精度オフ＋タイムアウト＋初回取得
-  let gotHere = false;
-  if (navigator.geolocation) {
-    const ok = pos => { M._osm_here(pos.coords.latitude, pos.coords.longitude); gotHere = true; draw(); };
-    const ng = () => {};
-    const opt = { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 };
-    navigator.geolocation.getCurrentPosition(ok, ng, opt);
-    navigator.geolocation.watchPosition(ok, ng, opt);
+  M._osm_init(fpp, fb.length); M._free(fpp);
+  if (pref){ const pp = pass(pref); M._osm_pref(pp); M._free(pp); }
+  $('msg').remove(); size(); draw(); loadTiles();
+  window.addEventListener('resize', ()=>{ size(); changed(); });
+  $('fit').onclick = ()=>{ M._osm_fit(); changed(); };
+
+  // 現在地（iPhone Safari 向けに高精度オフ＋タイムアウト＋初回取得）
+  let gotHere=false;
+  if (navigator.geolocation){
+    const ok = p => { M._osm_here(p.coords.latitude, p.coords.longitude); gotHere=true; draw(); };
+    const opt = { enableHighAccuracy:false, timeout:15000, maximumAge:60000 };
+    navigator.geolocation.getCurrentPosition(ok, ()=>{}, opt);
+    navigator.geolocation.watchPosition(ok, ()=>{}, opt);
   }
   $('here').onclick = ()=>{
-    if (gotHere){ M._osm_goto_here(); draw(); }
+    if (gotHere){ M._osm_goto_here(); changed(); }
     else if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
-      pos => { M._osm_here(pos.coords.latitude, pos.coords.longitude); gotHere = true; M._osm_goto_here(); draw(); },
-      () => alert('位置情報が取得できませんでした（設定の位置情報を確認してください）'),
-      { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+      p=>{ M._osm_here(p.coords.latitude,p.coords.longitude); gotHere=true; M._osm_goto_here(); changed(); },
+      ()=> alert('位置情報が取得できませんでした（設定の位置情報を確認してください）'),
+      { enableHighAccuracy:false, timeout:15000, maximumAge:60000 });
   };
+
+  // 操作
   const wrap = $('wrap');
   let down=false, px=0, py=0;
   wrap.addEventListener('pointerdown', e=>{ down=true; px=e.clientX; py=e.clientY; wrap.setPointerCapture(e.pointerId); wrap.style.cursor='grabbing'; });
-  wrap.addEventListener('pointermove', e=>{ if(!down) return; M._osm_pan((e.clientX-px)*dpr,(e.clientY-py)*dpr); px=e.clientX; py=e.clientY; draw(); });
-  wrap.addEventListener('pointerup', e=>{ down=false; wrap.style.cursor='grab'; });
-  wrap.addEventListener('wheel', e=>{ e.preventDefault(); M._osm_zoom(e.deltaY<0?1.2:1/1.2, e.clientX*dpr, e.clientY*dpr); draw(); }, {passive:false});
-  // ピンチ
+  wrap.addEventListener('pointermove', e=>{ if(!down) return; M._osm_pan((e.clientX-px)*dpr,(e.clientY-py)*dpr); px=e.clientX; py=e.clientY; changed(); });
+  wrap.addEventListener('pointerup', ()=>{ down=false; wrap.style.cursor='grab'; });
+  wrap.addEventListener('wheel', e=>{ e.preventDefault(); M._osm_zoom(e.deltaY<0?1.2:1/1.2, e.clientX*dpr, e.clientY*dpr); changed(); }, {passive:false});
   let d0=0;
   wrap.addEventListener('touchmove', e=>{ if(e.touches.length===2){ e.preventDefault();
     const a=e.touches[0], b=e.touches[1], d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    if(d0){ const mx=(a.clientX+b.clientX)/2*dpr, my=(a.clientY+b.clientY)/2*dpr; M._osm_zoom(d/d0,mx,my); draw(); }
+    if(d0){ M._osm_zoom(d/d0,(a.clientX+b.clientX)/2*dpr,(a.clientY+b.clientY)/2*dpr); changed(); }
     d0=d; } }, {passive:false});
   wrap.addEventListener('touchend', ()=> d0=0);
 })().catch(err=>{ const m=$('msg'); if(m) m.textContent='読み込みに失敗: '+err; });

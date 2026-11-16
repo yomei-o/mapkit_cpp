@@ -52,6 +52,17 @@ struct Map {
     }
     V2 to_screen(double wx, double wy) const { return {(float)((wx - cx) * scale + W / 2.0), (float)((wy - cy) * scale + H / 2.0)}; }
     void to_world(double sx, double sy, double& wx, double& wy) const { wx = cx + (sx - W / 2.0) / scale; wy = cy + (sy - H / 2.0) / scale; }
+    // 世界座標 → 経緯度（投影の逆）
+    void unproject(double wx, double wy, double& lon, double& lat) const {
+        const double d2r = MK_PI / 180.0;
+        if (proj == MERCATOR) {
+            const double R = 6378137.0;
+            lon = wx / R / d2r; lat = (2 * std::atan(std::exp(-wy / R)) - MK_PI / 2) / d2r;
+        } else {
+            double kx = 111320.0 * std::cos(lat0 * d2r), ky = 110574.0;
+            lon = wx / kx; lat = -wy / ky;
+        }
+    }
 
     void pan(double dx, double dy) { cx -= dx / scale; cy -= dy / scale; }
     void zoom(double f, double sx, double sy) {
@@ -185,6 +196,58 @@ struct Labels {
             font.draw(cv, tx, ty, L.text, fp, st.color, {0.02f, 0.03f, 0.05f}, 2.5f);
             used.push_back(b);
         }
+    }
+};
+
+// ---- タイル地図（z/x/y を動的に読み込む）----
+// タイル 1 枚のテキストには L（線）と P（ラベル）が混在。見えているタイルだけ読み、
+// 遠いタイルは捨てる（LRU）。ビューアは wanted() の欠けタイルを取ってきて add() する。
+struct Tile { Layer lay; Labels lab; long long used = 0; };
+
+struct TiledLayer {
+    int z = 13;
+    int cap = 24;                 // 一度に読むタイル数の上限（これを超える＝引きすぎ→detail を出さない）
+    size_t keep = 64;             // メモリに残すタイル数（LRU）
+    long long clock = 0;
+    std::map<long long, Tile> tiles;
+
+    static long long key(int x, int y) { return ((long long)x << 20) | (unsigned)y; }
+
+    // いま見えているタイルの (x,y)。引きすぎ（cap 超）なら空
+    std::vector<std::pair<int, int>> view_tiles(const Map& m) const {
+        double w0x, w0y, w1x, w1y; m.to_world(0, 0, w0x, w0y); m.to_world(m.W, m.H, w1x, w1y);
+        double lonA, latA, lonB, latB; m.unproject(w0x, w0y, lonA, latA); m.unproject(w1x, w1y, lonB, latB);
+        double lon0 = std::min(lonA, lonB), lon1 = std::max(lonA, lonB);
+        double lat0 = std::min(latA, latB), lat1 = std::max(latA, latB);
+        double n = std::pow(2.0, z);
+        auto xt = [&](double lon) { return (int)std::floor((lon + 180.0) / 360.0 * n); };
+        auto yt = [&](double lat) { return (int)std::floor((1.0 - std::asinh(std::tan(lat * MK_PI / 180.0)) / MK_PI) / 2.0 * n); };
+        int xa = xt(lon0), xb = xt(lon1), ya = yt(lat1), yb = yt(lat0);   // 北(lat1)→小さい y
+        std::vector<std::pair<int, int>> out;
+        for (int x = xa; x <= xb; ++x) for (int y = ya; y <= yb; ++y) {
+            out.push_back({x, y});
+            if ((int)out.size() > cap) return {};
+        }
+        return out;
+    }
+    bool has(int x, int y) const { return tiles.count(key(x, y)) != 0; }
+    void add(int x, int y, const std::string& text, const Map& m) {
+        Tile& t = tiles[key(x, y)];
+        t.lay.load(text, m); t.lab.load(text, m); t.used = ++clock;
+    }
+    void touch(int x, int y) { auto it = tiles.find(key(x, y)); if (it != tiles.end()) it->second.used = ++clock; }
+    void evict() {
+        while (tiles.size() > keep) {
+            auto lru = tiles.begin();
+            for (auto it = tiles.begin(); it != tiles.end(); ++it) if (it->second.used < lru->second.used) lru = it;
+            tiles.erase(lru);
+        }
+    }
+    void draw(Canvas& cv, const Map& m, const std::vector<Style>& st, const std::vector<int>& order,
+              Font& font, const std::vector<LabelStyle>& ls) {
+        auto vt = view_tiles(m);
+        for (auto& xy : vt) { auto it = tiles.find(key(xy.first, xy.second)); if (it != tiles.end()) { it->second.lay.draw(cv, m, st, order); it->second.used = ++clock; } }
+        for (auto& xy : vt) { auto it = tiles.find(key(xy.first, xy.second)); if (it != tiles.end()) it->second.lab.draw(cv, m, font, ls); }
     }
 };
 
