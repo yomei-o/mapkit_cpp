@@ -82,6 +82,18 @@ int main(int argc, char** argv) {
         for (auto& w : sp) { mk::V2 q = m.to_screen(w.x, w.y);
             mk::glow_dot(m.base, q, 9.f, {1.0f, 0.78f, 0.38f}, 0.95f);
             mk::disc(m.base, q, 2.3f, {1.0f, 0.93f, 0.72f}, 1.0f); }
+        // 吹き出し検証：先頭の銭湯に名前を出す（WASM と同じ描画）
+        if (!sp.empty() && font_obj.ok) {
+            mk::V2 q = m.to_screen(sp[0].x, sp[0].y);
+            std::string nm = "清水湯";
+            int fp = 13; float padx = 8.f, pady = 6.f;
+            float bw = font_obj.width(nm, fp) + padx * 2, bh = fp + pady * 2;
+            float bx0 = q.x - bw / 2, by1 = q.y - 15.f, by0 = by1 - bh, bx1 = bx0 + bw;
+            mk::round_rect(m.base, bx0 - 1.5f, by0 - 1.5f, bx1 + 1.5f, by1 + 1.5f, 7.f, {1.0f, 0.78f, 0.38f}, 0.95f);
+            mk::round_rect(m.base, bx0, by0, bx1, by1, 6.f, {0.07f, 0.09f, 0.13f}, 0.96f);
+            font_obj.draw(m.base, bx0 + padx, by0 + pady + fp, nm, fp, {1.0f, 0.95f, 0.85f}, {0.02f, 0.03f, 0.05f}, 2.0f);
+            mk::disc(m.base, q, 4.8f, {1.0f, 0.97f, 0.85f}, 1.0f);
+        }
         const uint8_t* px = m.to_rgba(); std::string f = out + "_sento.png";
         stbi_write_png(f.c_str(), W, H, 4, px, W * 4);
         printf("  sento: %d points -> %s\n", (int)sp.size(), f.c_str());

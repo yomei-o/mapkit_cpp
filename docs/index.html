@@ -26,8 +26,8 @@
 <div id="hint">ドラッグで移動・ホイール/ピンチで拡大。寄ると細い道と駅名が、引くと都道府県の形が出ます（タイルを動的に読み込み）</div>
 <div id="attr">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>／住所検索 <a href="https://www.gsi.go.jp/" target="_blank" rel="noopener">国土地理院</a></div>
 <div id="msg">読み込み中…</div>
-<script>const ASSET_V='4';</script>
-<script src="osm.js?v=4"></script>
+<script>const ASSET_V='5';</script>
+<script src="osm.js?v=5"></script>
 <script>
 let M, cv, ctx, img, W=0, H=0, dpr=1;
 const Z = 13;
@@ -136,10 +136,11 @@ function changed(){ draw(); scheduleLoad(); }
 
   // 操作
   const wrap = $('wrap');
-  let down=false, px=0, py=0;
-  wrap.addEventListener('pointerdown', e=>{ down=true; px=e.clientX; py=e.clientY; wrap.setPointerCapture(e.pointerId); wrap.style.cursor='grabbing'; });
-  wrap.addEventListener('pointermove', e=>{ if(!down) return; M._osm_pan((e.clientX-px)*dpr,(e.clientY-py)*dpr); px=e.clientX; py=e.clientY; changed(); });
-  wrap.addEventListener('pointerup', ()=>{ down=false; wrap.style.cursor='grab'; });
+  let down=false, px=0, py=0, sx0=0, sy0=0, moved=false;
+  wrap.addEventListener('pointerdown', e=>{ down=true; px=e.clientX; py=e.clientY; sx0=e.clientX; sy0=e.clientY; moved=false; wrap.setPointerCapture(e.pointerId); wrap.style.cursor='grabbing'; });
+  wrap.addEventListener('pointermove', e=>{ if(!down) return; if(Math.hypot(e.clientX-sx0,e.clientY-sy0)>5) moved=true; M._osm_pan((e.clientX-px)*dpr,(e.clientY-py)*dpr); px=e.clientX; py=e.clientY; changed(); });
+  wrap.addEventListener('pointerup', e=>{ down=false; wrap.style.cursor='grab';
+    if(!moved && sentoOn){ M._osm_pick(e.clientX*dpr, e.clientY*dpr); draw(); } });   // タップ＝銭湯を選んで吹き出し
   wrap.addEventListener('wheel', e=>{ e.preventDefault(); M._osm_zoom(e.deltaY<0?1.2:1/1.2, e.clientX*dpr, e.clientY*dpr); changed(); }, {passive:false});
   let d0=0;
   wrap.addEventListener('touchmove', e=>{ if(e.touches.length===2){ e.preventDefault();

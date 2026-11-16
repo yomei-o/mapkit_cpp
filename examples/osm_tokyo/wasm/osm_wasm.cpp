@@ -22,7 +22,9 @@ static mk::P2 here_w;
 static bool mark_on = false;   // 住所検索で立てる赤ピン（現在地とは別）
 static mk::P2 mark_w;
 static std::vector<mk::P2> sento_pts;   // 銭湯（光る点）
+static std::vector<std::string> sento_names;
 static bool sento_on = false;
+static int sento_sel = -1;              // 吹き出し表示中の銭湯（タップで選択）
 static bool dirty = true;
 static std::string g_json;
 
@@ -84,19 +86,38 @@ EMSCRIPTEN_KEEPALIVE int osm_goto_mark() { if (!mark_on) return 0; g.cx = mark_w
 
 // 銭湯レイヤ（各行 "lon lat 名前"）を読む。点で光らせる
 EMSCRIPTEN_KEEPALIVE int osm_sento(const char* text) {
-    sento_pts.clear();
+    sento_pts.clear(); sento_names.clear(); sento_sel = -1;
     for (const char* p = text; *p; ) {
         char* end;
         double lon = strtod(p, &end); if (end == p) { while (*p && *p != '\n') ++p; if (*p) ++p; continue; }
         double lat = strtod(end, &end);
+        while (*end == ' ' || *end == '\t') ++end;   // 名前の先頭へ
+        const char* ns = end;
+        while (*end && *end != '\n' && *end != '\r') ++end;
         sento_pts.push_back(g.project(lon, lat));
-        while (*end && *end != '\n') ++end;      // 行末（名前）まで飛ばす
-        p = *end ? end + 1 : end;
+        sento_names.emplace_back(ns, (size_t)(end - ns));
+        while (*end == '\n' || *end == '\r') ++end;
+        p = end;
     }
     dirty = true; return (int)sento_pts.size();
 }
-EMSCRIPTEN_KEEPALIVE void osm_sento_toggle(int on) { sento_on = on != 0; dirty = true; }
+EMSCRIPTEN_KEEPALIVE void osm_sento_toggle(int on) { sento_on = on != 0; if (!sento_on) sento_sel = -1; dirty = true; }
 EMSCRIPTEN_KEEPALIVE int osm_sento_is_on() { return sento_on ? 1 : 0; }
+
+// 画面(sx,sy デバイスpx)に一番近い銭湯を選ぶ。近くに無ければ選択解除。見つかれば1
+EMSCRIPTEN_KEEPALIVE int osm_pick(double sx, double sy) {
+    if (!sento_on) { if (sento_sel != -1) { sento_sel = -1; dirty = true; } return 0; }
+    double best = 1e18; int bi = -1;
+    double thr = 18.0 * g.ui; thr *= thr;
+    for (size_t i = 0; i < sento_pts.size(); ++i) {
+        mk::V2 p = g.to_screen(sento_pts[i].x, sento_pts[i].y);
+        double dx = p.x - sx, dy = p.y - sy, d = dx * dx + dy * dy;
+        if (d < best) { best = d; bi = (int)i; }
+    }
+    int sel = (bi >= 0 && best <= thr) ? bi : -1;
+    if (sel != sento_sel) { sento_sel = sel; dirty = true; }
+    return sento_sel >= 0 ? 1 : 0;
+}
 
 EMSCRIPTEN_KEEPALIVE const uint8_t* osm_render() {
     if (dirty) {
@@ -121,6 +142,24 @@ EMSCRIPTEN_KEEPALIVE const uint8_t* osm_render() {
             disc(g.base, p, 11.f * u, {1.f, 0.30f, 0.30f}, 0.22f);
             disc(g.base, p, 6.5f * u, {1.f, 1.f, 1.f}, 1.f);
             disc(g.base, p, 4.5f * u, {0.93f, 0.17f, 0.17f}, 1.f); }
+        // 選択中の銭湯の名前を吹き出しで（いちばん上に描く）
+        if (sento_on && sento_sel >= 0 && sento_sel < (int)sento_pts.size() && font.ok) {
+            float u = (float)g.ui;
+            mk::V2 p = g.to_screen(sento_pts[sento_sel].x, sento_pts[sento_sel].y);
+            const std::string& nm = sento_names[sento_sel];
+            int fp = std::max(11, (int)std::lround(13.0 * u));
+            float padx = 8.f * u, pady = 6.f * u;
+            float bw = font.width(nm, fp) + padx * 2, bh = fp + pady * 2;
+            float bx0 = p.x - bw / 2, by1 = p.y - 15.f * u, by0 = by1 - bh;
+            if (by0 < 4.f * u) { by0 = p.y + 15.f * u; by1 = by0 + bh; }   // 上に入らねば下へ
+            if (bx0 < 4.f * u) bx0 = 4.f * u;
+            if (bx0 + bw > g.W - 4.f * u) bx0 = g.W - 4.f * u - bw;
+            float bx1 = bx0 + bw;
+            round_rect(g.base, bx0 - 1.5f * u, by0 - 1.5f * u, bx1 + 1.5f * u, by1 + 1.5f * u, 7.f * u, {1.0f, 0.78f, 0.38f}, 0.95f);
+            round_rect(g.base, bx0, by0, bx1, by1, 6.f * u, {0.07f, 0.09f, 0.13f}, 0.96f);
+            font.draw(g.base, bx0 + padx, by0 + pady + fp, nm, fp, {1.0f, 0.95f, 0.85f}, {0.02f, 0.03f, 0.05f}, 2.0f);
+            disc(g.base, p, 4.8f * u, {1.0f, 0.97f, 0.85f}, 1.0f);        // 選択点を強調
+        }
         tD.evict(); tC.evict();
         dirty = false;
     }
