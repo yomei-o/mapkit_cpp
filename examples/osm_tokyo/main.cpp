@@ -66,6 +66,27 @@ int main(int argc, char** argv) {
     m.cx = c.x; m.cy = c.y;
     m.scale = 0.45; pin_shot("home_wide");   // 少し引き（駅まで入る）
 
+    // 銭湯レイヤの見た目確認（docs/sento.txt があれば、23区全体に光る点を重ねる）
+    std::string sento = read_all("docs/sento.txt");
+    if (!sento.empty()) {
+        std::vector<mk::P2> sp;
+        for (const char* p = sento.c_str(); *p; ) {
+            char* e; double lon = strtod(p, &e); if (e == p) { while (*p && *p != '\n') ++p; if (*p) ++p; continue; }
+            double lat = strtod(e, &e); sp.push_back(m.project(lon, lat));
+            while (*e && *e != '\n') ++e; p = *e ? e + 1 : e;
+        }
+        m.fit(lay.x0, lay.y0, lay.x1, lay.y1);
+        m.clear();
+        lay.draw(m.base, m, st, order);
+        labels.draw(m.base, m, font_obj, ls);
+        for (auto& w : sp) { mk::V2 q = m.to_screen(w.x, w.y);
+            mk::glow_dot(m.base, q, 9.f, {1.0f, 0.78f, 0.38f}, 0.95f);
+            mk::disc(m.base, q, 2.3f, {1.0f, 0.93f, 0.72f}, 1.0f); }
+        const uint8_t* px = m.to_rgba(); std::string f = out + "_sento.png";
+        stbi_write_png(f.c_str(), W, H, 4, px, W * 4);
+        printf("  sento: %d points -> %s\n", (int)sp.size(), f.c_str());
+    }
+
     // タイル経路のテスト：新小岩の view で、見えるタイルを docs/tiles から読んで描く
     mk::TiledLayer T; T.z = 13; T.cap = 64;
     int nt = 0;

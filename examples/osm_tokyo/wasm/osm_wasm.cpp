@@ -6,6 +6,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 #include <emscripten/emscripten.h>
+#include <cstdlib>
 #include <string>
 
 static mk::Map g;
@@ -20,6 +21,8 @@ static bool here_on = false;
 static mk::P2 here_w;
 static bool mark_on = false;   // 住所検索で立てる赤ピン（現在地とは別）
 static mk::P2 mark_w;
+static std::vector<mk::P2> sento_pts;   // 銭湯（光る点）
+static bool sento_on = false;
 static bool dirty = true;
 static std::string g_json;
 
@@ -79,12 +82,37 @@ EMSCRIPTEN_KEEPALIVE void osm_mark(double lat, double lon) { mark_w = g.project(
 EMSCRIPTEN_KEEPALIVE void osm_mark_off() { mark_on = false; dirty = true; }
 EMSCRIPTEN_KEEPALIVE int osm_goto_mark() { if (!mark_on) return 0; g.cx = mark_w.x; g.cy = mark_w.y; g.scale = 0.9; dirty = true; return 1; }
 
+// 銭湯レイヤ（各行 "lon lat 名前"）を読む。点で光らせる
+EMSCRIPTEN_KEEPALIVE int osm_sento(const char* text) {
+    sento_pts.clear();
+    for (const char* p = text; *p; ) {
+        char* end;
+        double lon = strtod(p, &end); if (end == p) { while (*p && *p != '\n') ++p; if (*p) ++p; continue; }
+        double lat = strtod(end, &end);
+        sento_pts.push_back(g.project(lon, lat));
+        while (*end && *end != '\n') ++end;      // 行末（名前）まで飛ばす
+        p = *end ? end + 1 : end;
+    }
+    dirty = true; return (int)sento_pts.size();
+}
+EMSCRIPTEN_KEEPALIVE void osm_sento_toggle(int on) { sento_on = on != 0; dirty = true; }
+EMSCRIPTEN_KEEPALIVE int osm_sento_is_on() { return sento_on ? 1 : 0; }
+
 EMSCRIPTEN_KEEPALIVE const uint8_t* osm_render() {
     if (dirty) {
         g.clear();
         if (!pref.feats.empty()) pref.draw(g.base, g, pref_st);
         mk::TiledLayer* L = active();
         if (L) L->draw(g.base, g, st, order, font, ls);
+        if (sento_on) {                 // 銭湯＝暖色で光る点
+            float u = (float)g.ui, m = 12.f * u;
+            for (auto& w : sento_pts) {
+                mk::V2 p = g.to_screen(w.x, w.y);
+                if (p.x < -m || p.y < -m || p.x > g.W + m || p.y > g.H + m) continue;  // 画面外カリング
+                glow_dot(g.base, p, 9.f * u, {1.0f, 0.78f, 0.38f}, 0.95f);   // ふわっとした光
+                disc(g.base, p, 2.3f * u, {1.0f, 0.93f, 0.72f}, 1.0f);       // 芯
+            }
+        }
         if (here_on) { mk::V2 p = g.to_screen(here_w.x, here_w.y);
             disc(g.base, p, 8.f * (float)g.ui, {1.f, 0.3f, 0.3f}, 0.30f);
             disc(g.base, p, 3.5f * (float)g.ui, {1.f, 0.38f, 0.35f}, 1.f); }

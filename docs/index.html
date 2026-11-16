@@ -14,6 +14,7 @@
   #bar b { color:#fff; } #bar button { background:#1a2636; color:#cfe; border:1px solid #2a3b55; border-radius:7px; padding:3px 9px; cursor:pointer; font-size:.82rem; }
   #bar input { background:#0d141e; color:#e8eef6; border:1px solid #2a3b55; border-radius:7px; padding:3px 8px; font-size:.82rem; width:9.5em; }
   #bar input::placeholder { color:#6b7c93; }
+  #bar button.on { background:#6b3a12; color:#ffd9a0; border-color:#b5712a; }
   #attr { position:fixed; right:10px; bottom:8px; color:#8da; font-size:.72rem; background:rgba(8,12,18,.7); padding:3px 7px; border-radius:6px; }
   #attr a { color:#9ec8ff; } #hint { position:fixed; left:12px; bottom:10px; color:#90a0b6; font-size:.76rem; }
   #msg { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:#90a0b6; }
@@ -21,12 +22,12 @@
 </head>
 <body>
 <div id="wrap"><canvas id="cv"></canvas></div>
-<div id="bar"><b>OSM 地図</b><input id="addr" placeholder="住所で検索" enterkeyhint="search"><button id="go">検索</button><button id="fit">東京へ</button><button id="here">現在地</button></div>
+<div id="bar"><b>OSM 地図</b><input id="addr" placeholder="住所で検索" enterkeyhint="search"><button id="go">検索</button><button id="fit">東京へ</button><button id="here">現在地</button><button id="sento">♨ 銭湯</button></div>
 <div id="hint">ドラッグで移動・ホイール/ピンチで拡大。寄ると細い道と駅名が、引くと都道府県の形が出ます（タイルを動的に読み込み）</div>
 <div id="attr">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>／住所検索 <a href="https://www.gsi.go.jp/" target="_blank" rel="noopener">国土地理院</a></div>
 <div id="msg">読み込み中…</div>
-<script>const ASSET_V='2';</script>
-<script src="osm.js?v=2"></script>
+<script>const ASSET_V='3';</script>
+<script src="osm.js?v=3"></script>
 <script>
 let M, cv, ctx, img, W=0, H=0, dpr=1;
 const Z = 13;
@@ -106,6 +107,24 @@ function changed(){ draw(); scheduleLoad(); }
   }
   $('go').onclick = doSearch;
   $('addr').addEventListener('keydown', e=>{ if (e.key === 'Enter'){ e.preventDefault(); doSearch(); } });
+
+  // 銭湯レイヤ（オンで点が光る）。データは初回オン時に読み込む
+  let sentoLoaded = false, sentoOn = false;
+  async function ensureSento(){
+    if (sentoLoaded) return true;
+    try {
+      const t = await fetch('sento.txt?v=' + ASSET_V).then(r=> r.ok ? r.text() : '');
+      if (!t) return false;
+      const p = pass(t); M._osm_sento(p); M._free(p); sentoLoaded = true; return true;
+    } catch(e){ return false; }
+  }
+  $('sento').onclick = async ()=>{
+    sentoOn = !sentoOn;
+    if (sentoOn && !(await ensureSento())){ sentoOn = false; alert('銭湯データの読み込みに失敗しました'); return; }
+    M._osm_sento_toggle(sentoOn ? 1 : 0);
+    $('sento').classList.toggle('on', sentoOn);
+    changed();
+  };
 
   $('here').onclick = ()=>{
     if (gotHere){ M._osm_goto_here(); changed(); }
