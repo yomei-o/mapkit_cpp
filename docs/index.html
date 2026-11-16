@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>OSM 東京23区ビューア — mapkit_cpp</title>
+<style>
+  html,body { margin:0; height:100%; background:#060910; color:#e8eef6;
+    font:14px/1.5 system-ui,"Hiragino Sans","Yu Gothic UI",sans-serif; overflow:hidden; }
+  #wrap { position:fixed; inset:0; touch-action:none; cursor:grab; }
+  canvas { display:block; width:100%; height:100%; }
+  #bar { position:fixed; left:12px; top:12px; display:flex; gap:10px; align-items:center;
+    background:rgba(12,17,26,.82); border:1px solid #223047; border-radius:10px; padding:7px 12px; backdrop-filter:blur(6px); }
+  #bar b { color:#fff; } #bar button { background:#1a2636; color:#cfe; border:1px solid #2a3b55; border-radius:7px; padding:3px 9px; cursor:pointer; font-size:.82rem; }
+  #attr { position:fixed; right:10px; bottom:8px; color:#8da; font-size:.72rem; background:rgba(8,12,18,.7); padding:3px 7px; border-radius:6px; }
+  #attr a { color:#9ec8ff; } #hint { position:fixed; left:12px; bottom:10px; color:#90a0b6; font-size:.76rem; }
+  #msg { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:#90a0b6; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv"></canvas></div>
+<div id="bar"><b>OSM 東京23区</b><button id="fit">全体</button></div>
+<div id="hint">ドラッグで移動・ホイール/ピンチで拡大。金=幹線 橙=鉄道 青=川/海</div>
+<div id="attr">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
+<div id="msg">読み込み中…</div>
+<script src="osm.js"></script>
+<script>
+let M, cv, ctx, img, W=0, H=0, dpr=1;
+const $ = id => document.getElementById(id);
+function pass(s){ const n=M.lengthBytesUTF8(s)+1, p=M._malloc(n); M.stringToUTF8(s,p,n); return p; }
+function size(){
+  dpr = Math.min(window.devicePixelRatio||1, 2);
+  cv.width=Math.round(innerWidth*dpr); cv.height=Math.round(innerHeight*dpr);
+  cv.style.width=innerWidth+'px'; cv.style.height=innerHeight+'px';
+  W=cv.width; H=cv.height; M._osm_resize(W,H,dpr); img=ctx.createImageData(W,H);
+}
+function draw(){ const p=M._osm_render(); img.data.set(M.HEAPU8.subarray(p,p+W*H*4)); ctx.putImageData(img,0,0); }
+(async () => {
+  const [roads, labels, font, mod] = await Promise.all([
+    fetch('osm23.txt').then(r=>r.text()),
+    fetch('osm23_labels.txt').then(r=>r.text()).catch(()=> ''),
+    fetch('font.ttf').then(r=>r.arrayBuffer()).catch(()=>new ArrayBuffer(0)),
+    createOSM()]);
+  M = mod; cv = $('cv'); ctx = cv.getContext('2d');
+  const rp = pass(roads), lp = pass(labels);
+  const fb = new Uint8Array(font), fpp = M._malloc(fb.length); M.HEAPU8.set(fb, fpp);
+  const nf = M._osm_init(rp, lp, fpp, fb.length);
+  M._free(rp); M._free(lp); M._free(fpp);
+  if (!nf){ $('msg').textContent='読み込みに失敗しました'; return; }
+  $('msg').remove(); size(); M._osm_fit(); draw();
+  window.addEventListener('resize', ()=>{ size(); draw(); });
+  $('fit').onclick = ()=>{ M._osm_fit(); draw(); };
+  const wrap = $('wrap');
+  let down=false, px=0, py=0;
+  wrap.addEventListener('pointerdown', e=>{ down=true; px=e.clientX; py=e.clientY; wrap.setPointerCapture(e.pointerId); wrap.style.cursor='grabbing'; });
+  wrap.addEventListener('pointermove', e=>{ if(!down) return; M._osm_pan((e.clientX-px)*dpr,(e.clientY-py)*dpr); px=e.clientX; py=e.clientY; draw(); });
+  wrap.addEventListener('pointerup', e=>{ down=false; wrap.style.cursor='grab'; });
+  wrap.addEventListener('wheel', e=>{ e.preventDefault(); M._osm_zoom(e.deltaY<0?1.2:1/1.2, e.clientX*dpr, e.clientY*dpr); draw(); }, {passive:false});
+  // ピンチ
+  let d0=0;
+  wrap.addEventListener('touchmove', e=>{ if(e.touches.length===2){ e.preventDefault();
+    const a=e.touches[0], b=e.touches[1], d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    if(d0){ const mx=(a.clientX+b.clientX)/2*dpr, my=(a.clientY+b.clientY)/2*dpr; M._osm_zoom(d/d0,mx,my); draw(); }
+    d0=d; } }, {passive:false});
+  wrap.addEventListener('touchend', ()=> d0=0);
+})().catch(err=>{ const m=$('msg'); if(m) m.textContent='読み込みに失敗: '+err; });
+</script>
+</body>
+</html>
