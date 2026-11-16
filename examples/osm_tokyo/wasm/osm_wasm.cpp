@@ -14,6 +14,8 @@ static std::vector<mk::Style> st;
 static std::vector<int> order;
 static std::vector<mk::LabelStyle> ls;
 static bool dirty = true;
+static bool here_on = false;       // 現在地（ページが渡す）
+static mk::P2 here_w;
 
 extern "C" {
 EMSCRIPTEN_KEEPALIVE int osm_init(const char* roads, const char* labs, const unsigned char* f, int fn) {
@@ -29,8 +31,19 @@ EMSCRIPTEN_KEEPALIVE void osm_resize(int w, int h, double ui) { g.ui = ui; g.res
 EMSCRIPTEN_KEEPALIVE void osm_fit() { g.fit(lay.x0, lay.y0, lay.x1, lay.y1); dirty = true; }
 EMSCRIPTEN_KEEPALIVE void osm_pan(double dx, double dy) { g.pan(dx, dy); dirty = true; }
 EMSCRIPTEN_KEEPALIVE void osm_zoom(double f, double x, double y) { g.zoom(f, x, y); dirty = true; }
+// 現在地（緯度・経度）。23区の外でも地図上の位置に玉を出す。osm_here_off で消す
+EMSCRIPTEN_KEEPALIVE void osm_here(double lat, double lon) { here_w = g.project(lon, lat); here_on = true; dirty = true; }
+EMSCRIPTEN_KEEPALIVE void osm_here_off() { here_on = false; dirty = true; }
+// 現在地へ寄る（取れていれば 1）
+EMSCRIPTEN_KEEPALIVE int osm_goto_here() { if (!here_on) return 0; g.cx = here_w.x; g.cy = here_w.y; g.scale = 0.45; dirty = true; return 1; }
 EMSCRIPTEN_KEEPALIVE const uint8_t* osm_render() {
-    if (dirty) { g.clear(); lay.draw(g.base, g, st, order); labels.draw(g.base, g, font, ls); dirty = false; }
+    if (dirty) {
+        g.clear(); lay.draw(g.base, g, st, order); labels.draw(g.base, g, font, ls);
+        if (here_on) { mk::V2 p = g.to_screen(here_w.x, here_w.y);
+            disc(g.base, p, 8.f * (float)g.ui, {1.f, 0.3f, 0.3f}, 0.30f);
+            disc(g.base, p, 3.5f * (float)g.ui, {1.f, 0.38f, 0.35f}, 1.f); }
+        dirty = false;
+    }
     return g.to_rgba();
 }
 }

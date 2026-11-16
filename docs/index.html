@@ -19,7 +19,7 @@
 </head>
 <body>
 <div id="wrap"><canvas id="cv"></canvas></div>
-<div id="bar"><b>OSM 東京23区</b><button id="fit">全体</button></div>
+<div id="bar"><b>OSM 東京23区</b><button id="fit">全体</button><button id="here">現在地</button></div>
 <div id="hint">ドラッグで移動・ホイール/ピンチで拡大。金=幹線 橙=鉄道 青=川/海</div>
 <div id="attr">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
 <div id="msg">読み込み中…</div>
@@ -50,6 +50,22 @@ function draw(){ const p=M._osm_render(); img.data.set(M.HEAPU8.subarray(p,p+W*H
   $('msg').remove(); size(); M._osm_fit(); draw();
   window.addEventListener('resize', ()=>{ size(); draw(); });
   $('fit').onclick = ()=>{ M._osm_fit(); draw(); };
+  // 現在地：23区内にいれば赤い玉。iPhone Safari 向けに高精度オフ＋タイムアウト＋初回取得
+  let gotHere = false;
+  if (navigator.geolocation) {
+    const ok = pos => { M._osm_here(pos.coords.latitude, pos.coords.longitude); gotHere = true; draw(); };
+    const ng = () => {};
+    const opt = { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 };
+    navigator.geolocation.getCurrentPosition(ok, ng, opt);
+    navigator.geolocation.watchPosition(ok, ng, opt);
+  }
+  $('here').onclick = ()=>{
+    if (gotHere){ M._osm_goto_here(); draw(); }
+    else if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
+      pos => { M._osm_here(pos.coords.latitude, pos.coords.longitude); gotHere = true; M._osm_goto_here(); draw(); },
+      () => alert('位置情報が取得できませんでした（設定の位置情報を確認してください）'),
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+  };
   const wrap = $('wrap');
   let down=false, px=0, py=0;
   wrap.addEventListener('pointerdown', e=>{ down=true; px=e.clientX; py=e.clientY; wrap.setPointerCapture(e.pointerId); wrap.style.cursor='grabbing'; });
