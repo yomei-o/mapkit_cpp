@@ -42,10 +42,29 @@ int main(int argc, char** argv) {
     };
     m.fit(lay.x0, lay.y0, lay.x1, lay.y1);
     shot("all");
-    // 新小岩駅あたりに寄る（経度 139.8585, 緯度 35.7166）
-    mk::P2 c = m.project(139.8585, 35.7166);
-    m.cx = c.x; m.cy = c.y; m.scale = 0.45;
-    shot("shinkoiwa");
+    // 中心（既定=新小岩駅あたり）。argv[7]=lon argv[8]=lat で上書き可
+    double clon = argc > 7 ? atof(argv[7]) : 139.8585;
+    double clat = argc > 8 ? atof(argv[8]) : 35.7166;
+    mk::P2 c = m.project(clon, clat);
+
+    // 中心に赤いピンを立てて描く
+    auto pin_shot = [&](const char* name) {
+        m.clear();
+        lay.draw(m.base, m, st, order);
+        labels.draw(m.base, m, font_obj, ls);
+        mk::V2 p = m.to_screen(c.x, c.y);
+        disc(m.base, p, 18.f, {1.f, 0.30f, 0.30f}, 0.22f);        // 外側のにじみ
+        disc(m.base, p, 9.5f, {1.f, 1.f, 1.f}, 1.f);              // 白フチ
+        disc(m.base, p, 7.0f, {0.93f, 0.17f, 0.17f}, 1.f);       // 赤い玉
+        const uint8_t* px = m.to_rgba();
+        std::string f = out + "_" + name + ".png";
+        stbi_write_png(f.c_str(), W, H, 4, px, W * 4);
+        printf("  %s(pin) -> %s (scale %.3f)\n", name, f.c_str(), m.scale);
+    };
+    m.cx = c.x; m.cy = c.y;
+    m.scale = 0.9;  pin_shot("home");        // 近所（住宅街まで）
+    m.cx = c.x; m.cy = c.y;
+    m.scale = 0.45; pin_shot("home_wide");   // 少し引き（駅まで入る）
 
     // タイル経路のテスト：新小岩の view で、見えるタイルを docs/tiles から読んで描く
     mk::TiledLayer T; T.z = 13; T.cap = 64;

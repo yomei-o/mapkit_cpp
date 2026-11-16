@@ -18,6 +18,8 @@ static mk::Layer pref;
 static std::vector<mk::Style> pref_st;
 static bool here_on = false;
 static mk::P2 here_w;
+static bool mark_on = false;   // 住所検索で立てる赤ピン（現在地とは別）
+static mk::P2 mark_w;
 static bool dirty = true;
 static std::string g_json;
 
@@ -72,6 +74,11 @@ EMSCRIPTEN_KEEPALIVE void osm_here(double lat, double lon) { here_w = g.project(
 EMSCRIPTEN_KEEPALIVE void osm_here_off() { here_on = false; dirty = true; }
 EMSCRIPTEN_KEEPALIVE int osm_goto_here() { if (!here_on) return 0; g.cx = here_w.x; g.cy = here_w.y; g.scale = 0.45; dirty = true; return 1; }
 
+// 住所検索の赤ピン（現在地の玉とは独立）
+EMSCRIPTEN_KEEPALIVE void osm_mark(double lat, double lon) { mark_w = g.project(lon, lat); mark_on = true; dirty = true; }
+EMSCRIPTEN_KEEPALIVE void osm_mark_off() { mark_on = false; dirty = true; }
+EMSCRIPTEN_KEEPALIVE int osm_goto_mark() { if (!mark_on) return 0; g.cx = mark_w.x; g.cy = mark_w.y; g.scale = 0.9; dirty = true; return 1; }
+
 EMSCRIPTEN_KEEPALIVE const uint8_t* osm_render() {
     if (dirty) {
         g.clear();
@@ -81,6 +88,11 @@ EMSCRIPTEN_KEEPALIVE const uint8_t* osm_render() {
         if (here_on) { mk::V2 p = g.to_screen(here_w.x, here_w.y);
             disc(g.base, p, 8.f * (float)g.ui, {1.f, 0.3f, 0.3f}, 0.30f);
             disc(g.base, p, 3.5f * (float)g.ui, {1.f, 0.38f, 0.35f}, 1.f); }
+        if (mark_on) { mk::V2 p = g.to_screen(mark_w.x, mark_w.y);   // 住所検索ピン
+            float u = (float)g.ui;
+            disc(g.base, p, 11.f * u, {1.f, 0.30f, 0.30f}, 0.22f);
+            disc(g.base, p, 6.5f * u, {1.f, 1.f, 1.f}, 1.f);
+            disc(g.base, p, 4.5f * u, {0.93f, 0.17f, 0.17f}, 1.f); }
         tD.evict(); tC.evict();
         dirty = false;
     }

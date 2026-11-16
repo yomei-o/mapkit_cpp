@@ -12,6 +12,8 @@
   #bar { position:fixed; left:12px; top:12px; display:flex; gap:10px; align-items:center;
     background:rgba(12,17,26,.82); border:1px solid #223047; border-radius:10px; padding:7px 12px; backdrop-filter:blur(6px); }
   #bar b { color:#fff; } #bar button { background:#1a2636; color:#cfe; border:1px solid #2a3b55; border-radius:7px; padding:3px 9px; cursor:pointer; font-size:.82rem; }
+  #bar input { background:#0d141e; color:#e8eef6; border:1px solid #2a3b55; border-radius:7px; padding:3px 8px; font-size:.82rem; width:9.5em; }
+  #bar input::placeholder { color:#6b7c93; }
   #attr { position:fixed; right:10px; bottom:8px; color:#8da; font-size:.72rem; background:rgba(8,12,18,.7); padding:3px 7px; border-radius:6px; }
   #attr a { color:#9ec8ff; } #hint { position:fixed; left:12px; bottom:10px; color:#90a0b6; font-size:.76rem; }
   #msg { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:#90a0b6; }
@@ -19,9 +21,9 @@
 </head>
 <body>
 <div id="wrap"><canvas id="cv"></canvas></div>
-<div id="bar"><b>OSM 地図</b><button id="fit">東京へ</button><button id="here">現在地</button></div>
+<div id="bar"><b>OSM 地図</b><input id="addr" placeholder="住所で検索" enterkeyhint="search"><button id="go">検索</button><button id="fit">東京へ</button><button id="here">現在地</button></div>
 <div id="hint">ドラッグで移動・ホイール/ピンチで拡大。寄ると細い道と駅名が、引くと都道府県の形が出ます（タイルを動的に読み込み）</div>
-<div id="attr">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
+<div id="attr">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>／住所検索 <a href="https://www.gsi.go.jp/" target="_blank" rel="noopener">国土地理院</a></div>
 <div id="msg">読み込み中…</div>
 <script src="osm.js"></script>
 <script>
@@ -84,6 +86,26 @@ function changed(){ draw(); scheduleLoad(); }
     navigator.geolocation.getCurrentPosition(ok, ()=>{}, opt);
     navigator.geolocation.watchPosition(ok, ()=>{}, opt);
   }
+  // 住所検索（国土地理院ジオコーディング、キー不要・CORS許可済み）→ 赤ピン
+  async function geocode(q){
+    const url = 'https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(q);
+    const r = await fetch(url); if (!r.ok) return null;
+    const list = await r.json(); if (!list.length) return null;
+    const [lon, lat] = list[0].geometry.coordinates; return { lon, lat };
+  }
+  async function doSearch(){
+    const q = $('addr').value.trim(); if (!q) return;
+    const btn = $('go'); btn.disabled = true;
+    try {
+      const h = await geocode(q);
+      if (!h){ alert('住所が見つかりませんでした（施設名より住所で入れてみてください）'); return; }
+      M._osm_mark(h.lat, h.lon); M._osm_goto_mark(); changed();
+    } catch(e){ alert('検索に失敗しました: ' + e); }
+    finally { btn.disabled = false; }
+  }
+  $('go').onclick = doSearch;
+  $('addr').addEventListener('keydown', e=>{ if (e.key === 'Enter'){ e.preventDefault(); doSearch(); } });
+
   $('here').onclick = ()=>{
     if (gotHere){ M._osm_goto_here(); changed(); }
     else if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
