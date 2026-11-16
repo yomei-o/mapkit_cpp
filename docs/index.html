@@ -25,7 +25,8 @@
 <div id="hint">ドラッグで移動・ホイール/ピンチで拡大。寄ると細い道と駅名が、引くと都道府県の形が出ます（タイルを動的に読み込み）</div>
 <div id="attr">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>／住所検索 <a href="https://www.gsi.go.jp/" target="_blank" rel="noopener">国土地理院</a></div>
 <div id="msg">読み込み中…</div>
-<script src="osm.js"></script>
+<script>const ASSET_V='2';</script>
+<script src="osm.js?v=2"></script>
 <script>
 let M, cv, ctx, img, W=0, H=0, dpr=1;
 const Z = 13;
@@ -69,7 +70,7 @@ function changed(){ draw(); scheduleLoad(); }
   const [font, pref, mod] = await Promise.all([
     fetch('font.ttf').then(r=>r.arrayBuffer()).catch(()=>new ArrayBuffer(0)),
     fetch('japan.txt').then(r=>r.text()).catch(()=> ''),
-    createOSM()]);
+    createOSM({ locateFile: (p, prefix) => prefix + p + '?v=' + ASSET_V })]);
   M = mod; cv = $('cv'); ctx = cv.getContext('2d');
   const fb = new Uint8Array(font), fpp = M._malloc(fb.length); M.HEAPU8.set(fb, fpp);
   M._osm_init(fpp, fb.length); M._free(fpp);
