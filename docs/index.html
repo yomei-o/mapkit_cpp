@@ -72,7 +72,7 @@ function changed(){ draw(); scheduleLoad(); }
   const fb = new Uint8Array(font), fpp = M._malloc(fb.length); M.HEAPU8.set(fb, fpp);
   M._osm_init(fpp, fb.length); M._free(fpp);
   if (pref){ const pp = pass(pref); M._osm_pref(pp); M._free(pp); }
-  $('msg').remove(); size(); draw(); loadTiles();
+  $('msg').remove(); size(); M._osm_fit(); draw(); loadTiles();   // サイズ確定後にフィット（scale が決まる）
   window.addEventListener('resize', ()=>{ size(); changed(); });
   $('fit').onclick = ()=>{ M._osm_fit(); changed(); };
 
