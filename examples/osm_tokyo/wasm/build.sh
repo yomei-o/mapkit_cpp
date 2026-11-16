@@ -12,6 +12,7 @@ mkdir -p docs
   -s EXPORTED_RUNTIME_METHODS='["HEAPU8","UTF8ToString","stringToUTF8","lengthBytesUTF8"]' -s EXPORTED_FUNCTIONS='["_malloc","_free"]' \
   examples/osm_tokyo/wasm/osm_wasm.cpp -o docs/osm.js
 cp examples/osm_tokyo/data/osm23.txt docs/osm23.txt
+cp examples/osm_tokyo/data/japan.txt docs/japan.txt
 cp examples/osm_tokyo/data/osm23_labels.txt docs/osm23_labels.txt
 cp examples/osm_tokyo/data/font.ttf docs/font.ttf
 echo "built docs/osm.js"

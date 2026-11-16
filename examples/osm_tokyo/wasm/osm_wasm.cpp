@@ -16,6 +16,8 @@ static std::vector<mk::LabelStyle> ls;
 static bool dirty = true;
 static bool here_on = false;       // 現在地（ページが渡す）
 static mk::P2 here_w;
+static mk::Layer pref;             // 47 都道府県の外形（引いたとき用）
+static std::vector<mk::Style> pref_st;
 
 extern "C" {
 EMSCRIPTEN_KEEPALIVE int osm_init(const char* roads, const char* labs, const unsigned char* f, int fn) {
@@ -26,6 +28,12 @@ EMSCRIPTEN_KEEPALIVE int osm_init(const char* roads, const char* labs, const uns
     g.fit(lay.x0, lay.y0, lay.x1, lay.y1);
     dirty = true;
     return n;
+}
+// 47 都道府県の外形（data/japan.txt）。戻り値は輪の数
+EMSCRIPTEN_KEEPALIVE int osm_pref(const char* text) {
+    int n = pref.load(text, g, 0);
+    pref_st = {{{0.34f, 0.41f, 0.54f}, 1.0f, 0.6f}};
+    dirty = true; return n;
 }
 EMSCRIPTEN_KEEPALIVE void osm_resize(int w, int h, double ui) { g.ui = ui; g.resize(w, h); dirty = true; }
 EMSCRIPTEN_KEEPALIVE void osm_fit() { g.fit(lay.x0, lay.y0, lay.x1, lay.y1); dirty = true; }
@@ -38,7 +46,9 @@ EMSCRIPTEN_KEEPALIVE void osm_here_off() { here_on = false; dirty = true; }
 EMSCRIPTEN_KEEPALIVE int osm_goto_here() { if (!here_on) return 0; g.cx = here_w.x; g.cy = here_w.y; g.scale = 0.45; dirty = true; return 1; }
 EMSCRIPTEN_KEEPALIVE const uint8_t* osm_render() {
     if (dirty) {
-        g.clear(); lay.draw(g.base, g, st, order); labels.draw(g.base, g, font, ls);
+        g.clear();
+        if (!pref.feats.empty()) pref.draw(g.base, g, pref_st);   // 都道府県の外形（下に薄く）
+        lay.draw(g.base, g, st, order); labels.draw(g.base, g, font, ls);
         if (here_on) { mk::V2 p = g.to_screen(here_w.x, here_w.y);
             disc(g.base, p, 8.f * (float)g.ui, {1.f, 0.3f, 0.3f}, 0.30f);
             disc(g.base, p, 3.5f * (float)g.ui, {1.f, 0.38f, 0.35f}, 1.f); }

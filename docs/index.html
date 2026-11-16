@@ -36,16 +36,18 @@ function size(){
 }
 function draw(){ const p=M._osm_render(); img.data.set(M.HEAPU8.subarray(p,p+W*H*4)); ctx.putImageData(img,0,0); }
 (async () => {
-  const [roads, labels, font, mod] = await Promise.all([
+  const [roads, labels, font, pref, mod] = await Promise.all([
     fetch('osm23.txt').then(r=>r.text()),
     fetch('osm23_labels.txt').then(r=>r.text()).catch(()=> ''),
     fetch('font.ttf').then(r=>r.arrayBuffer()).catch(()=>new ArrayBuffer(0)),
+    fetch('japan.txt').then(r=>r.text()).catch(()=> ''),
     createOSM()]);
   M = mod; cv = $('cv'); ctx = cv.getContext('2d');
   const rp = pass(roads), lp = pass(labels);
   const fb = new Uint8Array(font), fpp = M._malloc(fb.length); M.HEAPU8.set(fb, fpp);
   const nf = M._osm_init(rp, lp, fpp, fb.length);
   M._free(rp); M._free(lp); M._free(fpp);
+  if (pref) { const pp = pass(pref); M._osm_pref(pp); M._free(pp); }   // 47都道府県の外形
   if (!nf){ $('msg').textContent='読み込みに失敗しました'; return; }
   $('msg').remove(); size(); M._osm_fit(); draw();
   window.addEventListener('resize', ()=>{ size(); draw(); });
